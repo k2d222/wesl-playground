@@ -1,9 +1,17 @@
-import { For, type Component, createSignal, createEffect, Index } from 'solid-js';
+import { compile, CompileOptions } from "./wesl-web/wesl_web"
+import ansiHTML from "ansi-html"
+
+import * as monaco from 'monaco-editor';
+import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
+import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
+import cssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker'
+import htmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker'
+import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
+
+import { For, type Component, createSignal, createEffect, Index, onMount } from 'solid-js';
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store";
 import './style.scss'
 
-import { compile, CompileOptions } from "./wesl-web/wesl_web"
-import ansiHTML from "ansi-html"
 
 export function createLocalStore<T extends object>(
   name: string,
@@ -46,6 +54,46 @@ function run() {
   }
 }
 
+function setupMonaco(elt: HTMLElement) {
+  self.MonacoEnvironment = {
+    getWorker: function (workerId, label) {
+      const getWorkerModule = (moduleUrl, label) => {
+       return new Worker(self.MonacoEnvironment.getWorkerUrl(moduleUrl, label), {
+        name: label,
+        type: 'module'
+       });
+      };
+
+      switch (label) {
+       case 'json':
+        return jsonWorker();
+       case 'css':
+       case 'scss':
+       case 'less':
+        return cssWorker();
+       case 'html':
+       case 'handlebars':
+       case 'razor':
+        return htmlWorker();
+       case 'typescript':
+       case 'javascript':
+        return tsWorker();
+       default:
+        return editorWorker();
+      }
+    }
+  };
+  let editor = monaco.editor.create(elt, {
+    value: input().source,
+    language: 'wgsl'
+  });
+
+  editor.getModel().onDidChangeContent(e => setSource(editor.getValue()))
+  createEffect(() => {
+    editor.setValue(input().source)
+  })
+}
+
 const App: Component = () => {
   return (
     <div id="app">
@@ -62,7 +110,7 @@ const App: Component = () => {
             </>
           }</Index>
         </div>
-        <textarea id="input" value={input().source} oninput={e => setSource(e.currentTarget.value)} />
+        <div id="input" ref={elt => setTimeout(() => setupMonaco(elt), 1000)}></div>
       </div>
       <div id="right">
         <pre><code id="output" innerHTML={output()}></code></pre>

@@ -13,14 +13,16 @@
   "devDependencies": {
     "@types/ansi-html": "^0.0.0",
     "sass-embedded": "^1.79.4",
-    "solid-devtools": "^0.29.2",
+    "solid-devtools": "^0.30.1",
     "typescript": "^5.3.3",
     "vite": "^5.0.11",
+    "vite-plugin-monaco-editor": "^1.1.0",
     "vite-plugin-solid": "^2.8.2",
     "vite-plugin-wasm": "^3.3.0"
   },
   "dependencies": {
     "ansi-html": "^0.0.9",
+    "monaco-editor": "^0.52.0",
     "solid-js": "^1.8.11",
     "vite-plugin-top-level-await": "^1.4.4"
   }
