@@ -1,0 +1,27 @@
+{
+  "name": "vite-template-solid",
+  "version": "0.0.0",
+  "description": "",
+  "type": "module",
+  "scripts": {
+    "start": "vite",
+    "dev": "vite",
+    "build": "vite build",
+    "serve": "vite preview"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@types/ansi-html": "^0.0.0",
+    "sass-embedded": "^1.79.4",
+    "solid-devtools": "^0.29.2",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.11",
+    "vite-plugin-solid": "^2.8.2",
+    "vite-plugin-wasm": "^3.3.0"
+  },
+  "dependencies": {
+    "ansi-html": "^0.0.9",
+    "solid-js": "^1.8.11",
+    "vite-plugin-top-level-await": "^1.4.4"
+  }
+}
