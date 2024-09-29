@@ -1,97 +1,166 @@
-import { compile, CompileOptions } from "./wesl-web/wesl_web"
-import ansiHTML from "ansi-html"
+import { compile, WeslOptions, ManglerKind } from "./wesl-web/wesl_web"
 
 import * as monaco from 'monaco-editor';
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
-import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
-import cssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker'
-import htmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker'
-import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
 
-import { For, type Component, createSignal, createEffect, Index, onMount } from 'solid-js';
+import { For, type Component, createSignal, createEffect } from 'solid-js';
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store";
 import './style.scss'
 
+const DEFAULT_FILES = [
+  { name: 'main.wgsl', source: 'import util/my_fn;\nfn main() -> u32 {\n    return my_fn();\n}\n' },
+  { name: 'util.wgsl', source: 'fn my_fn() -> u32 { return 42; }' },
+]
+const DEFAULT_OPTIONS = {
+  root: 'main.wgsl',
+  imports: true,
+  condcomp: true,
+  strip: false,
+  entrypoints: '',
+  mangler: 'Escape' as ManglerKind,
+  eval: '',
+  features: '',
+}
+const DEFAULT_OUTPUT =
+`Visit the <a href="https://github.com/wgsl-tooling-wg/wesl-spec">WESL reference</a> to learn about WESL.<br/>
+<br/>
+Options:
+<ul>
+  <li>imports — enable/disable the <a href="https://github.com/wgsl-tooling-wg/wesl-spec/blob/main/Imports.md">import extension</a></li>
+  <li>conditionals — enable/disable the <a href="https://github.com/wgsl-tooling-wg/wesl-spec/blob/main/ConditionalTranslation.md">conditional translation extension</a>
+    <ul>
+      <li>features — comma-separated list of features to enable/disable. Syntax: feat1=true,feat2=false,...</li>
+    </ul>
+  </li>
+  <li>mangler — choose the <a href="https://github.com/wgsl-tooling-wg/wesl-spec/blob/main/NameMangling.md">name mangling scheme</a>
+    <ul>
+      <li>None — no mangling is performed. Name collisions can happen</li>
+      <li>Hash — mangling based on a hash of the fully-qualified name</li>
+      <li>Escape — fully-qualified name, with underscores escaped (recommended)</li>
+    </ul>
+  </li>
+  <li>root — select the root file</li>
+  <li>strip — remove unused declarations
+    <ul>
+      <li>keep — comma-separated list of declarations in the root to keep when strip is enabled</li>
+    </ul>
+  </li>
+  <li>eval — if set, evaluate a const-expression and output the result</a>
+  <ly
+</ul>
+`.replaceAll(/\s*\n\s*/g, '')
 
-export function createLocalStore<T extends object>(
-  name: string,
-  init: T
-): [Store<T>, SetStoreFunction<T>] {
+function createLocalStore<T extends object>(name: string, init: T): [Store<T>, SetStoreFunction<T>] {
   const localState = localStorage.getItem(name);
-  const [state, setState] = createStore<T>(
-    localState ? JSON.parse(localState) : init
-  );
+  const [state, setState] = createStore<T>(localState ? JSON.parse(localState) : init);
   createEffect(() => localStorage.setItem(name, JSON.stringify(state)));
   return [state, setState];
 }
 
-const [files, setFiles] = createLocalStore("files", [
-    { name: "main.wgsl", source: "import util/my_fn;\nfn main() -> u32 {\n    return my_fn();\n}\n" },
-    { name: "util.wgsl", source: "fn my_fn() -> u32 { return 42; }" },
-]);
+function removeIndex<T>(array: readonly T[], index: number): T[] {
+  return [...array.slice(0, index), ...array.slice(index + 1)];
+}
+
+const [files, setFiles] = createLocalStore('files', DEFAULT_FILES);
+
+const [options, setOptions] = createLocalStore('options', DEFAULT_OPTIONS);
+
+const newFile = () => setFiles(files.length, { name: `tab${files.length}.wgsl`, source: "" })
+const delFile = (i: number) => setFiles(files => removeIndex(files, i))
+const renameFile = (i: number, name: string) => setFiles(i, (old) => ({ name, source: old.source }))
 
 const [tab, setTab] = createSignal(0)
-const input = () => files[tab()]
+
+const input = () => {
+  if (files.length == 0) {
+    setFiles([{ name: 'main.wgsl', source: 'fn main() -> u32 {\n    return 0u;\n}\n' }])
+  }
+  return files[tab()]
+}
 const setSource = (source) => setFiles(tab(), { name: input().name, source })
-const [output, setOutput] = createSignal("output goes here")
+const [output, setOutput] = createSignal(DEFAULT_OUTPUT)
 
 function run() {
-  const options: CompileOptions = {
+  const entrypoints = options.entrypoints === '' ? null : options.entrypoints.split(',').map(e => e.trim())
+  const features = Object.fromEntries(options.features.split(',').map(f => f.split('=', 2).map(x => x.trim())))
+  const eval_ = options.eval === '' ? null : options.eval
+  const comp: WeslOptions = {
+      ...options,
       files: Object.fromEntries(files.map(f => [f.name, f.source])),
-      entrypoint: "main.wgsl",
-      imports: true,
-      condcomp: true,
-      strip: false,
-      entrypoints: null,
-      features: {},
+      features,
+      entrypoints,
+      eval: eval_,
   }
 
+  console.log('compiling', comp)
+
   try {
-    const res = compile(options)
+    const res = compile(comp)
     setOutput(res)
   } catch (e) {
-    setOutput(ansiHTML(e))
+    setOutput(e)
   }
+}
+
+function reset() {
+  setFiles(DEFAULT_FILES)
+  setOptions(DEFAULT_OPTIONS)
+  setOutput(DEFAULT_OUTPUT)
 }
 
 function setupMonaco(elt: HTMLElement) {
   self.MonacoEnvironment = {
-    getWorker: function (workerId, label) {
-      const getWorkerModule = (moduleUrl, label) => {
-       return new Worker(self.MonacoEnvironment.getWorkerUrl(moduleUrl, label), {
-        name: label,
-        type: 'module'
-       });
-      };
-
-      switch (label) {
-       case 'json':
-        return jsonWorker();
-       case 'css':
-       case 'scss':
-       case 'less':
-        return cssWorker();
-       case 'html':
-       case 'handlebars':
-       case 'razor':
-        return htmlWorker();
-       case 'typescript':
-       case 'javascript':
-        return tsWorker();
-       default:
-        return editorWorker();
-      }
+    getWorker: function (_workerId, _label) {
+        return new editorWorker();
     }
   };
   let editor = monaco.editor.create(elt, {
     value: input().source,
-    language: 'wgsl'
+    language: 'wgsl',
+    automaticLayout: true,
   });
 
-  editor.getModel().onDidChangeContent(e => setSource(editor.getValue()))
+  editor.getModel().onDidChangeContent(() => setSource(editor.getValue()))
   createEffect(() => {
     editor.setValue(input().source)
   })
+}
+
+interface TabBtnProps {
+  name: string,
+  selected: boolean,
+  onselect: () => void,
+  onrename: (name: string) => void,
+  ondelete: () => void
+}
+
+function TabBtn(props: TabBtnProps) {
+  const setEditable = (e: { currentTarget: HTMLElement }) => {
+    e.currentTarget.contentEditable = 'true'
+    e.currentTarget.focus()
+  }
+
+  const endEditable = (e: { currentTarget: HTMLElement }) => {
+    e.currentTarget.contentEditable = 'false'
+    props.onrename(e.currentTarget.textContent)
+    e.currentTarget.blur()
+  }
+
+  const onKeyDown = (e: KeyboardEvent & { currentTarget: HTMLElement }) => {
+    if (!/^[\w\.]$/.test(e.key)) {
+      e.preventDefault()
+      endEditable(e)
+    }
+  }
+
+  return (
+    <div class="tab-btn" classList={{selected: props.selected}} role="button" tabindex="0" onclick={props.onselect}>
+      <div ondblclick={setEditable} onblur={endEditable} onkeydown={onKeyDown} contenteditable={false}>{props.name}</div>
+      <button onclick={props.ondelete}>
+        <svg viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+      </button>
+    </div>
+  )
 }
 
 const App: Component = () => {
@@ -100,19 +169,68 @@ const App: Component = () => {
       <div id="header">
         <h3>WESL Sandbox</h3>
         <button id="btn-run" onclick={run}>run</button>
+        <button id="btn-reset" onclick={reset}>reset</button>
       </div>
       <div id="left">
-        <div class="tabs">
-          <Index each={files}>{(file, i) => 
-            <>
-              <button onclick={() => setTab(i)}>{file().name}</button>
-              <button onclick={() => setFiles(i, undefined)}>x</button>
-            </>
-          }</Index>
+        <div class="head tabs">
+          <For each={files}>{(file, i) => 
+            <TabBtn name={file.name}
+              selected={i() == tab()}
+              onselect={() => setTab(i)}
+              onrename={name => renameFile(i(), name)}
+              ondelete={() => delFile(i())} />
+          }</For>
+          <div class="tab-btn">
+            <button tabindex="0" onclick={newFile}>
+              <svg viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 12L20 12M12 4L12 20"></path></svg>
+            </button>
+          </div>
         </div>
-        <div id="input" ref={elt => setTimeout(() => setupMonaco(elt), 1000)}></div>
+        <div id="input" ref={elt => setupMonaco(elt)}></div>
       </div>
       <div id="right">
+        <div id="options" class="head">
+          <label>
+            <span>imports</span>
+            <input type="checkbox" checked={options.imports} onchange={e => setOptions("imports", e.currentTarget.checked)} />
+          </label>
+          <label>
+            <span>conditionals</span>
+            <input type="checkbox" checked={options.condcomp} onchange={e => setOptions("condcomp", e.currentTarget.checked)} />
+          </label>
+          <label>
+            <span>features</span>
+            <input type="text" disabled={!options.features} value={options.features} onchange={e => setOptions("features", e.currentTarget.value)} />
+          </label>
+          <label>
+            <span>mangler</span>
+            <select value={options.mangler} onchange={e => setOptions("mangler", e.currentTarget.value as ManglerKind)}>
+              <option value="None">None</option>
+              <option value="Hash">Hash</option>
+              <option value="Escape">Escape</option>
+            </select>
+          </label>
+          <label>
+            <span>root</span>
+            <select value={options.root} onchange={e => setOptions("root", e.currentTarget.value)}>
+              <For each={files}>{file => 
+                <option value={file.name}>{file.name}</option>
+              }</For>
+            </select>
+          </label>
+          <label>
+            <span>strip</span>
+            <input type="checkbox" checked={options.strip} onchange={e => setOptions("strip", e.currentTarget.checked)} />
+          </label>
+          <label>
+            <span>keep</span>
+            <input type="text" disabled={!options.strip} value={options.entrypoints} onchange={e => setOptions("entrypoints", e.currentTarget.value)} />
+          </label>
+          <label>
+            <span>eval</span>
+            <input type="text" value={options.eval} onchange={e => setOptions("eval", e.currentTarget.value)} />
+          </label>
+        </div>
         <pre><code id="output" innerHTML={output()}></code></pre>
       </div>
     </div>
