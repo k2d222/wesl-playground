@@ -21,7 +21,6 @@
     "vite-plugin-wasm": "^3.3.0"
   },
   "dependencies": {
-    "ansi-html": "^0.0.9",
     "monaco-editor": "^0.52.0",
     "solid-js": "^1.8.11",
     "vite-plugin-top-level-await": "^1.4.4"

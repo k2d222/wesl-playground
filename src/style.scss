@@ -1,3 +1,11 @@
+@use 'sass:color';
+
+@font-face {
+  src: url("assets/Roboto-Regular.ttf") format("truetype");
+  font-family: "Roboto";
+  font-weight: 100;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -10,6 +18,9 @@ body {
   height: 100%;
   margin: 0;
   padding: 1rem;
+  font-family: "Roboto", Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+  color: black;
+  background-color: #bbb;
 }
 
 button {
@@ -47,25 +58,56 @@ button {
   button {
     color: white;
     border-radius: 3px;
-    padding: .2rem .6rem;
+    padding: .4rem 1.2rem;
     font-size: 1.2rem;
+    text-transform: uppercase;
+    font-weight: bold;
+    font-size: 1rem;
   }
 
   #btn-run {
-    background-color: #6fac1cff;
+    $color: #6fac1c;
+    background-color: $color;
+    transition: all .2s ease;
+    outline: 1px solid $color;
+
+    &:hover {
+      background-color: color.adjust($color, $lightness: 2%);
+      outline: 1px solid color.adjust($color, $lightness: -2%);
+    }
+
+    &:active {
+      background-color: color.adjust($color, $lightness: -2%);
+    }
   }
 
   #btn-reset {
-    background-color: #f17700ff;
+    $color: #f17700;
+    background-color: $color;
+    transition: all .2s ease;
+    outline: 1px solid $color;
+
+    &:hover {
+      background-color: color.adjust($color, $lightness: 2%);
+      outline: 1px solid color.adjust($color, $lightness: -2%);
+    }
+
+    &:active {
+      background-color: color.adjust($color, $lightness: -2%);
+    }
   }
 }
 
 #left {
   grid-area: left;
 
+  >.wrap {
+    display: flex;
+    flex-direction: column;
+  }
+
   #input {
-    width: 100%;
-    height: 100%;
+    flex-grow: 1;
   }
 }
 
@@ -75,9 +117,10 @@ button {
   #options {
     display: flex;
     gap: .1rem;
+    align-items: center;
 
     >label {
-      padding: 0.25rem 0.5rem;
+      padding: 0.5rem 0.5rem;
     }
   }
 
@@ -94,21 +137,28 @@ button {
 }
 
 .head {
-  border-bottom: 1px solid lightgrey;
   width: 100%;
-  height: 2rem;
+  height: 3rem;
   overflow-x: auto;
   white-space: nowrap;
+  background-color: #d7d7d7;
 }
 
 #left,
 #right {
-  border: 1px solid lightgrey;
+  border: 1px solid #a4a4a4;
   display: flex;
   flex-direction: column;
   position: relative;
   width: 100%;
   height: 100%;
+  background: white;
+  box-shadow: 0 0 4px 0px #00000014;
+}
+
+.wrap {
+  position: absolute;
+  inset: 0;
 }
 
 textarea {
@@ -135,16 +185,46 @@ input[type=text] {
     height: 100%;
     align-items: center;
     gap: 0.25rem;
-    padding: 0.25rem 0.5rem;
+    padding: 0.5rem 1rem;
+    background-color: #e8e8e8;
+    border-bottom: 1px solid #e8e8e8;
+    transition: all 0.1s ease;
+
+    &:not(.selected):hover {
+      background-color: white;
+    }
 
     &.selected {
-      background-color: #ddd;
+      background-color: white;
+      border-bottom: 3px solid #2e76ff;
     }
 
     svg {
-      with: 100%;
+      width: 100%;
       height: 100%;
-      stroke: grey;
+      stroke: black;
+      transition: all 0.1s ease;
+    }
+
+    &.text {
+      padding-right: 0.5rem;
+
+      button {
+        margin-left: 0.25rem;
+        opacity: 0;
+        border-radius: 4px;
+        padding: 5px;
+        box-sizing: content-box;
+        transition: all 0.1s ease;
+
+        &:hover {
+          background: #e8e8e8;
+        }
+      }
+
+      &:hover button {
+        opacity: 1;
+      }
     }
   }
 }
