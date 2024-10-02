@@ -241,7 +241,7 @@ const App: Component = () => {
               <input type="text" value={options.eval} onchange={e => setOptions("eval", e.currentTarget.value)} />
             </label>
           </div>
-          <pre><code id="output" innerHTML={output()}></code></pre>
+          <div id="output"><pre><code innerHTML={output()}></code></pre></div>
         </div>
       </div>
     </div>
