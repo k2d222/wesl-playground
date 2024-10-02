@@ -50,9 +50,22 @@ Options:
 </ul>
 `.replaceAll(/\s*\n\s*/g, '')
 
+const URL_PARAMS = new URLSearchParams(window.location.search);
+
 function createLocalStore<T extends object>(name: string, init: T): [Store<T>, SetStoreFunction<T>] {
-  const localState = localStorage.getItem(name);
-  const [state, setState] = createStore<T>(localState ? JSON.parse(localState) : init);
+  if (URL_PARAMS.has(name)) {
+    try {
+      init = JSON.parse(decodeURIComponent(URL_PARAMS.get(name)))
+      console.log(init)
+    }
+    catch (e) {
+      console.error(`failed to parse URI component '${name}'`, e)
+    }
+  }
+  else if (localStorage.getItem(name) !== null) {
+    init = JSON.parse(localStorage.getItem(name))
+  }
+  const [state, setState] = createStore<T>(init);
   createEffect(() => localStorage.setItem(name, JSON.stringify(state)));
   return [state, setState];
 }
@@ -112,6 +125,15 @@ function reset() {
   setFiles(DEFAULT_FILES)
   setOptions(DEFAULT_OPTIONS)
   setOutput(DEFAULT_OUTPUT)
+}
+
+function share() {
+  const codedFiles = encodeURIComponent(JSON.stringify(files))
+  const codedOptions = encodeURIComponent(JSON.stringify(options))
+  const url = new URL(window.location.origin + window.location.pathname)
+  url.search = `?files=${codedFiles}&options=${codedOptions}`
+  // window.location.search = url.search
+  setOutput('copy the URL below share this sandbox.\n' + url.toString())
 }
 
 function setupMonaco(elt: HTMLElement) {
@@ -177,6 +199,7 @@ const App: Component = () => {
         <h3>WESL Sandbox</h3>
         <button id="btn-run" onclick={run}>run</button>
         <button id="btn-reset" onclick={reset}>reset</button>
+        <button id="btn-share" onclick={share}>share</button>
       </div>
       <div id="left">
         <div class="wrap">

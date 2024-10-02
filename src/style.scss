@@ -19,7 +19,7 @@ $base-color: if($dark, #666, #bbb);
 $text-col: if($dark, white, black);
 
 @function col($n) {
-  @return color.adjust($base-color, $lightness: if($dark, -$n, $n) * 10.0);
+  @return color.adjust($base-color, $lightness: if($dark, -$n, $n) * 10%);
 }
 
 body {
@@ -108,6 +108,22 @@ input[type=text] {
 
   #btn-reset {
     $color: #f17700;
+    background-color: $color;
+    transition: all .2s ease;
+    outline: 1px solid $color;
+
+    &:hover {
+      background-color: color.adjust($color, $lightness: 2%);
+      outline: 1px solid color.adjust($color, $lightness: -2%);
+    }
+
+    &:active {
+      background-color: color.adjust($color, $lightness: -2%);
+    }
+  }
+
+  #btn-share {
+    $color: #2da0f1;
     background-color: $color;
     transition: all .2s ease;
     outline: 1px solid $color;
