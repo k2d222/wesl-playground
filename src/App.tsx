@@ -6,6 +6,7 @@ import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
 import { For, type Component, createSignal, createEffect, Show } from 'solid-js';
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store";
 import './style.scss'
+import { encodeForUrl, urlGetObject, urlGetString } from "./encdec";
 
 const DEFAULT_FILES = [
   { name: 'main.wgsl', source: 'import util/my_fn;\nfn main() -> u32 {\n    return my_fn();\n}\n' },
@@ -59,23 +60,22 @@ Options:
 </ul>
 `.replaceAll(/\s*\n\s*/g, '')
 
-const URL_PARAMS = new URLSearchParams(window.location.search);
-
 function createLocalStore<T extends object>(name: string, init: T): [Store<T>, SetStoreFunction<T>] {
-  if (URL_PARAMS.has(name)) {
-    try {
-      init = JSON.parse(decodeURIComponent(URL_PARAMS.get(name)))
-      console.log(init)
-    }
-    catch (e) {
-      console.error(`failed to parse URI component '${name}'`, e)
-    }
-  }
-  else if (localStorage.getItem(name) !== null) {
+  if (localStorage.getItem(name) !== null) {
     init = JSON.parse(localStorage.getItem(name))
   }
   const [state, setState] = createStore<T>(init);
   createEffect(() => localStorage.setItem(name, JSON.stringify(state)));
+
+  urlGetObject<T>(name).then(init => {
+    if (init !== null) {
+      setState(init)
+    }
+  }).catch(e => {
+      console.error(e)
+      alert('invalid url!')
+  });
+
   return [state, setState];
 }
 
@@ -93,6 +93,10 @@ const [optionsNcth, setOptionsNcth] = createLocalStore('optionsNcth', DEFAULT_OP
 const [linker, setLinker] = createSignal('k2d222')
 const [tab, setTab] = createSignal(0)
 
+if (urlGetString('linker') !== null) {
+  setLinker(urlGetString('linker'))
+}
+
 const input = () => {
   if (files.length == 0) {
     setFiles([{ name: 'main.wgsl', source: 'fn main() -> u32 {\n    return 0u;\n}\n' }])
@@ -106,9 +110,15 @@ const setSource = (source) => setFiles(tab(), { name: input().name, source })
 const [output, setOutput] = createSignal(DEFAULT_OUTPUT)
 
 function run() {
-  if (linker() !== 'k2d222') {
-    return run_ncth()
+  if (linker() === 'k2d222') {
+    return run_k2d222()
   }
+  else if (linker() === 'ncthbrt') {
+    run_ncth()
+  }
+}
+
+function run_k2d222() {
   const entrypoints = options.entrypoints === '' ? null : options.entrypoints.split(',').map(e => e.trim())
   const features = Object.fromEntries(
     options.features
@@ -157,11 +167,17 @@ function reset() {
   setOutput(DEFAULT_OUTPUT)
 }
 
-function share() {
-  const codedFiles = encodeURIComponent(JSON.stringify(files))
-  const codedOptions = encodeURIComponent(JSON.stringify(options))
+async function share() {
+  const codedFiles = await encodeForUrl(JSON.stringify(files))
   const url = new URL(window.location.origin + window.location.pathname)
-  url.search = `?files=${codedFiles}&options=${codedOptions}`
+  url.search = '?files=' + codedFiles + '&linker=' + linker()
+
+  if (linker() === 'k2d222') {
+    url.search += '&options=' + await encodeForUrl(JSON.stringify(options))
+  } else {
+    url.search += '&optionsNcth=' + await encodeForUrl(JSON.stringify(optionsNcth))
+  }
+
   // window.location.search = url.search
   setOutput('copy the URL below share this playground.\n' + url.toString())
 }
@@ -206,7 +222,7 @@ function TabBtn(props: TabBtnProps) {
   }
 
   const onKeyDown = (e: KeyboardEvent & { currentTarget: HTMLElement }) => {
-    if (!/^[\w\.]$/.test(e.key)) {
+    if (["Enter", "Escape", "Tab"].includes(e.key)) {
       e.preventDefault()
       endEditable(e)
     }
@@ -304,6 +320,14 @@ const App: Component = () => {
               </label>
             </Show>
             <Show when={linker() === 'ncthbrt'}>
+              <label>
+                <span>root</span>
+                <select value={optionsNcth.root} onchange={e => setOptionsNcth("root", e.currentTarget.value)}>
+                  <For each={files}>{file => 
+                    <option value={file.name}>{file.name}</option>
+                  }</For>
+                </select>
+              </label>
               <label>
                 <span>resolve</span>
                 <input type="checkbox" checked={optionsNcth.resolve} onchange={e => setOptionsNcth("resolve", e.currentTarget.checked)} />

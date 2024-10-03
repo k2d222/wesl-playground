@@ -101,17 +101,36 @@ fn compile_impl_ncthbrt(args: NcthOptions) -> Result<String, String> {
             .map(|(k, v)| (PathBuf::from(k), v.clone()))
             .collect(),
     };
-    let entry_points = file_system.files.keys().cloned().collect();
     let bundler = wesl_bundle::Bundler { file_system };
 
-    let source_module = match bundler.bundle(&wesl_bundle::BundleContext {
-        entry_points,
-        // enclosing_module_name: Some(args.root.replace(".wgsl", "").clone()),
+    let mut source_module = match bundler.bundle(&wesl_bundle::BundleContext {
+        entry_points: vec![PathBuf::from(&args.root)],
         enclosing_module_name: None,
     }) {
         Ok(ast) => ast,
         Err(err) => return Err(ansi_to_html::convert(&err.to_string()).unwrap()),
     };
+
+    for entry in args.files.keys() {
+        if entry == &args.root {
+            continue;
+        }
+
+        let module = match bundler.bundle(&wesl_bundle::BundleContext {
+            entry_points: vec![PathBuf::from(entry)],
+            enclosing_module_name: Some(entry.replace(".wgsl", "").replace(".wesl", "")),
+        }) {
+            Ok(ast) => ast,
+            Err(err) => return Err(ansi_to_html::convert(&err.to_string()).unwrap()),
+        };
+
+        source_module
+            .global_directives
+            .extend(module.global_directives);
+        source_module
+            .global_declarations
+            .extend(module.global_declarations);
+    }
 
     let compile = || -> Result<wesl_parse::syntax::TranslationUnit, CompilerPassError> {
         let mut result = if args.resolve {
