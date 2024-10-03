@@ -1,9 +1,9 @@
-import { compile, WeslOptions, ManglerKind } from "./wesl-web/wesl_web"
+import { compile, WeslOptions, ManglerKind, NcthOptions, compile_ncth } from "./wesl-web/wesl_web"
 
 import * as monaco from 'monaco-editor';
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
 
-import { For, type Component, createSignal, createEffect } from 'solid-js';
+import { For, type Component, createSignal, createEffect, Show } from 'solid-js';
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store";
 import './style.scss'
 
@@ -17,9 +17,18 @@ const DEFAULT_OPTIONS = {
   condcomp: true,
   strip: false,
   entrypoints: '',
-  mangler: 'Escape' as ManglerKind,
+  mangler: 'escape' as ManglerKind,
   eval: '',
   features: '',
+}
+const DEFAULT_OPTIONS_NCTH = {
+    root: 'main.wgsl',
+    resolve: true,
+    normalize: true,
+    specialize: true,
+    dealias: true,
+    mangle: true,
+    flatten: true,
 }
 const DEFAULT_OUTPUT =
 `Visit the <a href="https://github.com/wgsl-tooling-wg/wesl-spec">WESL reference</a> to learn about WESL.<br/>
@@ -78,8 +87,10 @@ const newFile = () => setFiles(files.length, { name: `tab${files.length}.wgsl`, 
 const delFile = (i: number) => setFiles(files => removeIndex(files, i))
 const renameFile = (i: number, name: string) => setFiles(i, (old) => ({ name, source: old.source }))
 
-const [files, setFiles] = createLocalStore('files', DEFAULT_FILES);
-const [options, setOptions] = createLocalStore('options', DEFAULT_OPTIONS);
+const [files, setFiles] = createLocalStore('files', DEFAULT_FILES)
+const [options, setOptions] = createLocalStore('options', DEFAULT_OPTIONS)
+const [optionsNcth, setOptionsNcth] = createLocalStore('optionsNcth', DEFAULT_OPTIONS_NCTH)
+const [linker, setLinker] = createSignal('k2d222')
 const [tab, setTab] = createSignal(0)
 
 const input = () => {
@@ -95,6 +106,9 @@ const setSource = (source) => setFiles(tab(), { name: input().name, source })
 const [output, setOutput] = createSignal(DEFAULT_OUTPUT)
 
 function run() {
+  if (linker() !== 'k2d222') {
+    return run_ncth()
+  }
   const entrypoints = options.entrypoints === '' ? null : options.entrypoints.split(',').map(e => e.trim())
   const features = Object.fromEntries(
     options.features
@@ -121,6 +135,22 @@ function run() {
   }
 }
 
+function run_ncth() {
+  const comp: NcthOptions = {
+      ...optionsNcth,
+      files: Object.fromEntries(files.map(f => [f.name, f.source])),
+  }
+
+  console.log('compiling', comp)
+
+  try {
+    const res = compile_ncth(comp)
+    setOutput(res)
+  } catch (e) {
+    setOutput(e)
+  }
+}
+
 function reset() {
   setFiles(DEFAULT_FILES)
   setOptions(DEFAULT_OPTIONS)
@@ -133,7 +163,7 @@ function share() {
   const url = new URL(window.location.origin + window.location.pathname)
   url.search = `?files=${codedFiles}&options=${codedOptions}`
   // window.location.search = url.search
-  setOutput('copy the URL below share this sandbox.\n' + url.toString())
+  setOutput('copy the URL below share this playground.\n' + url.toString())
 }
 
 function setupMonaco(elt: HTMLElement) {
@@ -196,10 +226,18 @@ const App: Component = () => {
   return (
     <div id="app">
       <div id="header">
-        <h3>WESL Sandbox</h3>
+        <h3>WESL Playground</h3>
         <button id="btn-run" onclick={run}>run</button>
         <button id="btn-reset" onclick={reset}>reset</button>
         <button id="btn-share" onclick={share}>share</button>
+        <label>
+          <span>k2d222's linker</span>
+          <input type="radio" name="linker" value="k2d222" checked={linker() === "k2d222"} onchange={e => setLinker(e.currentTarget.value)} />
+        </label>
+        <label>
+          <span>ncthbrt's linker</span>
+          <input type="radio" name="linker" value="ncthbrt" checked={linker() === "ncthbrt"} onchange={e => setLinker(e.currentTarget.value)} />
+        </label>
       </div>
       <div id="left">
         <div class="wrap">
@@ -223,46 +261,74 @@ const App: Component = () => {
       <div id="right">
         <div class="wrap">
           <div id="options" class="head">
-            <label>
-              <span>imports</span>
-              <input type="checkbox" checked={options.imports} onchange={e => setOptions("imports", e.currentTarget.checked)} />
-            </label>
-            <label>
-              <span>conditionals</span>
-              <input type="checkbox" checked={options.condcomp} onchange={e => setOptions("condcomp", e.currentTarget.checked)} />
-            </label>
-            <label>
-              <span>features</span>
-              <input type="text" disabled={!options.condcomp} value={options.features} onchange={e => setOptions("features", e.currentTarget.value)} />
-            </label>
-            <label>
-              <span>mangler</span>
-              <select value={options.mangler} onchange={e => setOptions("mangler", e.currentTarget.value as ManglerKind)}>
-                <option value="None">None</option>
-                <option value="Hash">Hash</option>
-                <option value="Escape">Escape</option>
-              </select>
-            </label>
-            <label>
-              <span>root</span>
-              <select value={options.root} onchange={e => setOptions("root", e.currentTarget.value)}>
-                <For each={files}>{file => 
-                  <option value={file.name}>{file.name}</option>
-                }</For>
-              </select>
-            </label>
-            <label>
-              <span>strip</span>
-              <input type="checkbox" checked={options.strip} onchange={e => setOptions("strip", e.currentTarget.checked)} />
-            </label>
-            <label>
-              <span>keep</span>
-              <input type="text" disabled={!options.strip} value={options.entrypoints} onchange={e => setOptions("entrypoints", e.currentTarget.value)} />
-            </label>
-            <label>
-              <span>eval</span>
-              <input type="text" value={options.eval} onchange={e => setOptions("eval", e.currentTarget.value)} />
-            </label>
+            <Show when={linker() === 'k2d222'}>
+              <label>
+                <span>imports</span>
+                <input type="checkbox" checked={options.imports} onchange={e => setOptions("imports", e.currentTarget.checked)} />
+              </label>
+              <label>
+                <span>conditionals</span>
+                <input type="checkbox" checked={options.condcomp} onchange={e => setOptions("condcomp", e.currentTarget.checked)} />
+              </label>
+              <label>
+                <span>features</span>
+                <input type="text" disabled={!options.condcomp} value={options.features} onchange={e => setOptions("features", e.currentTarget.value)} />
+              </label>
+              <label>
+                <span>mangler</span>
+                <select value={options.mangler} onchange={e => setOptions("mangler", e.currentTarget.value as ManglerKind)}>
+                  <option value="none">None</option>
+                  <option value="hash">Hash</option>
+                  <option value="escape">Escape</option>
+                </select>
+              </label>
+              <label>
+                <span>root</span>
+                <select value={options.root} onchange={e => setOptions("root", e.currentTarget.value)}>
+                  <For each={files}>{file => 
+                    <option value={file.name}>{file.name}</option>
+                  }</For>
+                </select>
+              </label>
+              <label>
+                <span>strip</span>
+                <input type="checkbox" checked={options.strip} onchange={e => setOptions("strip", e.currentTarget.checked)} />
+              </label>
+              <label>
+                <span>keep</span>
+                <input type="text" disabled={!options.strip} value={options.entrypoints} onchange={e => setOptions("entrypoints", e.currentTarget.value)} />
+              </label>
+              <label>
+                <span>eval</span>
+                <input type="text" value={options.eval} onchange={e => setOptions("eval", e.currentTarget.value)} />
+              </label>
+            </Show>
+            <Show when={linker() === 'ncthbrt'}>
+              <label>
+                <span>resolve</span>
+                <input type="checkbox" checked={optionsNcth.resolve} onchange={e => setOptionsNcth("resolve", e.currentTarget.checked)} />
+              </label>
+              <label>
+                <span>normalize</span>
+                <input type="checkbox" checked={optionsNcth.normalize} onchange={e => setOptionsNcth("normalize", e.currentTarget.checked)} />
+              </label>
+              <label>
+                <span>specialize</span>
+                <input type="checkbox" checked={optionsNcth.specialize} onchange={e => setOptionsNcth("specialize", e.currentTarget.checked)} />
+              </label>
+              <label>
+                <span>dealias</span>
+                <input type="checkbox" checked={optionsNcth.dealias} onchange={e => setOptionsNcth("dealias", e.currentTarget.checked)} />
+              </label>
+              <label>
+                <span>mangle</span>
+                <input type="checkbox" checked={optionsNcth.mangle} onchange={e => setOptionsNcth("mangle", e.currentTarget.checked)} />
+              </label>
+              <label>
+                <span>flatten</span>
+                <input type="checkbox" checked={optionsNcth.flatten} onchange={e => setOptionsNcth("flatten", e.currentTarget.checked)} />
+              </label>
+            </Show>
           </div>
           <div id="output"><pre><code innerHTML={output()}></code></pre></div>
         </div>

@@ -1,13 +1,10 @@
-mod utils;
-
 use std::{collections::HashMap, path::PathBuf};
 
 use cfg_if::cfg_if;
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 use wasm_bindgen::prelude::*;
-use wesl::{syntax::Expression, *};
-
+use wesl::*;
 #[wasm_bindgen]
 extern "C" {
     fn alert(s: &str);
@@ -15,6 +12,7 @@ extern "C" {
 
 #[derive(Tsify, Serialize, Deserialize, Default)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "lowercase")]
 pub enum ManglerKind {
     #[default]
     Escape,
@@ -36,6 +34,19 @@ pub struct WeslOptions {
     pub entrypoints: Option<Vec<String>>,
     pub features: HashMap<String, bool>,
     pub eval: Option<String>,
+}
+
+#[derive(Tsify, Serialize, Deserialize)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+pub struct NcthOptions {
+    pub files: HashMap<String, String>,
+    pub root: String,
+    pub resolve: bool,
+    pub normalize: bool,
+    pub specialize: bool,
+    pub dealias: bool,
+    pub mangle: bool,
+    pub flatten: bool,
 }
 
 fn make_mangler(kind: ManglerKind) -> Box<dyn Mangler> {
@@ -79,6 +90,70 @@ fn compile_impl(args: WeslOptions) -> Result<String, Diagnostic> {
     }
 }
 
+fn compile_impl_ncthbrt(args: NcthOptions) -> Result<String, String> {
+    use wesl_types::{CompilerPass, CompilerPassError};
+    let root_path = PathBuf::from(&args.root);
+    let file_system = wesl_bundle::file_system::VirtualFilesystem {
+        entry_point: root_path.parent().unwrap().to_path_buf(),
+        files: args
+            .files
+            .iter()
+            .map(|(k, v)| (PathBuf::from(k), v.clone()))
+            .collect(),
+    };
+    let entry_points = file_system.files.keys().cloned().collect();
+    let bundler = wesl_bundle::Bundler { file_system };
+
+    let source_module = match bundler.bundle(&wesl_bundle::BundleContext {
+        entry_points,
+        // enclosing_module_name: Some(args.root.replace(".wgsl", "").clone()),
+        enclosing_module_name: None,
+    }) {
+        Ok(ast) => ast,
+        Err(err) => return Err(ansi_to_html::convert(&err.to_string()).unwrap()),
+    };
+
+    let compile = || -> Result<wesl_parse::syntax::TranslationUnit, CompilerPassError> {
+        let mut result = if args.resolve {
+            let mut resolver = wesl_resolve::Resolver::default();
+            let result = resolver.apply(&source_module)?;
+            result
+        } else {
+            source_module
+        };
+        if args.normalize {
+            let mut normalizer = wesl_template_normalize::TemplateNormalizer {
+                ..Default::default()
+            };
+            normalizer.apply_mut(&mut result)?;
+        }
+        if args.specialize {
+            let mut specializer = wesl_specialize::Specializer::default();
+            specializer.apply_mut(&mut result)?;
+        }
+        if args.dealias {
+            let mut dealiaser = wesl_dealias::Dealiaser {
+                ..Default::default()
+            };
+            dealiaser.apply_mut(&mut result)?;
+        }
+        if args.mangle {
+            let mut mangler = wesl_mangle::Mangler {
+                ..Default::default()
+            };
+            mangler.apply_mut(&mut result)?;
+        }
+        if args.flatten {
+            let mut flattener = wesl_flatten::Flattener::default();
+            flattener.apply_mut(&mut result)?;
+        }
+        Ok(result)
+    };
+    compile()
+        .map(|result| result.to_string())
+        .map_err(|e| format!("{e:?}"))
+}
+
 cfg_if! {
     if #[cfg(feature = "debug")] {
         fn init_log() {
@@ -96,7 +171,11 @@ cfg_if! {
 #[wasm_bindgen]
 pub fn compile(args: WeslOptions) -> Result<String, String> {
     init_log();
-    compile_impl(args)
-        .map(|d| d.to_string())
-        .map_err(|e| ansi_to_html::convert(&e.to_string()).unwrap())
+    compile_impl(args).map_err(|e| ansi_to_html::convert(&e.to_string()).unwrap())
+}
+
+#[wasm_bindgen]
+pub fn compile_ncth(args: NcthOptions) -> Result<String, String> {
+    init_log();
+    compile_impl_ncthbrt(args).map(|d| d.to_string())
 }

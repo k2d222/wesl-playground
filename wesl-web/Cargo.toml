@@ -25,8 +25,19 @@ cfg-if = "0.1"
 serde = { version = "1.0.210", features = ["derive"] }
 serde-wasm-bindgen = "0.6.5"
 tsify = "0.4.5"
-wesl = { version = "0.0.2", path = "../../wgsl-tools/crates/wesl" }
+wesl = { path = "../../wgsl-tools/crates/wesl" }
 ansi-to-html = "0.2.1"
+
+wesl-parse = { path = '../../wesl-rust/crates/wesl-parse' }
+wesl-bundle = { path = '../../wesl-rust/crates/wesl-bundle' }
+wesl-resolve = { path = '../../wesl-rust/crates/wesl-resolve' }
+wesl-types = { path = '../../wesl-rust/crates/wesl-types' }
+wesl-mangle = { path = '../../wesl-rust/crates/wesl-mangle' }
+wesl-flatten = { path = '../../wesl-rust/crates/wesl-flatten' }
+wesl-dealias = { path = '../../wesl-rust/crates/wesl-dealias' }
+wesl-specialize = { path = '../../wesl-rust/crates/wesl-specialize' }
+wesl-template-normalize = { path = '../../wesl-rust/crates/wesl-template-normalize' }
+
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.34"
