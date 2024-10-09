@@ -3,10 +3,9 @@ import { compile, WeslOptions, ManglerKind, NcthOptions, compile_ncth } from "./
 import * as monaco from 'monaco-editor';
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
 
-import { For, type Component, createSignal, createEffect, Show } from 'solid-js';
+import { For, type Component, createSignal, createEffect, Show, onMount, onCleanup } from 'solid-js';
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store";
 import './style.scss'
-import { encodeForUrl, urlGetObject, urlGetString } from "./encdec";
 
 const DEFAULT_FILES = [
   { name: 'main.wgsl', source: 'import util/my_fn;\nfn main() -> u32 {\n    return my_fn();\n}\n' },
@@ -60,22 +59,53 @@ Options:
 </ul>
 `.replaceAll(/\s*\n\s*/g, '')
 
+const URL_PARAMS = new URLSearchParams(window.location.search);
+
+function getHashFromUrl() {
+  const match = window.location.pathname.match(/^\/s\/([a-f0-9]+)$/)
+  if (match) {
+    return match[1]
+  }
+  else {
+    return null
+  }
+}
+
+function onPopState(e: PopStateEvent) {
+  const hash = getHashFromUrl()
+  if (hash) {
+    console.log(`share hash: ${hash}`)
+    setShare(hash)
+  }
+}
+
+let hasHash = false
+
+onMount(() => {
+  const hash = getHashFromUrl()
+  if (hash) {
+    setShare(hash)
+  }
+  window.addEventListener('popstate', onPopState);
+});
+
+onCleanup(() => {
+  window.removeEventListener('popstate', onPopState);
+})
+
 function createLocalStore<T extends object>(name: string, init: T): [Store<T>, SetStoreFunction<T>] {
   if (localStorage.getItem(name) !== null) {
     init = JSON.parse(localStorage.getItem(name))
   }
   const [state, setState] = createStore<T>(init);
-  createEffect(() => localStorage.setItem(name, JSON.stringify(state)));
-
-  urlGetObject<T>(name).then(init => {
-    if (init !== null) {
-      setState(init)
+  createEffect(() => {
+    if (hasHash) {
+      window.history.pushState({}, "", "/")
+      hasHash = false
     }
-  }).catch(e => {
-      console.error(e)
-      alert('invalid url!')
-  });
 
+    localStorage.setItem(name, JSON.stringify(state))
+  });
   return [state, setState];
 }
 
@@ -87,15 +117,21 @@ const newFile = () => setFiles(files.length, { name: `tab${files.length}.wgsl`, 
 const delFile = (i: number) => setFiles(files => removeIndex(files, i))
 const renameFile = (i: number, name: string) => setFiles(i, (old) => ({ name, source: old.source }))
 
-const [files, setFiles] = createLocalStore('files', DEFAULT_FILES)
-const [options, setOptions] = createLocalStore('options', DEFAULT_OPTIONS)
-const [optionsNcth, setOptionsNcth] = createLocalStore('optionsNcth', DEFAULT_OPTIONS_NCTH)
-const [linker, setLinker] = createSignal('k2d222')
-const [tab, setTab] = createSignal(0)
+const initialLinker = URL_PARAMS.get('linker') ?? 'k2d222'
+const initialOptions = { ...DEFAULT_OPTIONS }
+const initialOptionsNcth = { ...DEFAULT_OPTIONS_NCTH }
+for (const key in DEFAULT_OPTIONS)
+  if (URL_PARAMS.has(key))
+    initialOptions[key] = URL_PARAMS.get(key)
+for (const key in DEFAULT_OPTIONS_NCTH)
+  if (URL_PARAMS.has(key))
+    initialOptionsNcth[key] = URL_PARAMS.get(key)
 
-if (urlGetString('linker') !== null) {
-  setLinker(urlGetString('linker'))
-}
+const [files, setFiles] = createLocalStore('files', DEFAULT_FILES)
+const [options, setOptions] = createLocalStore('options', initialOptions)
+const [optionsNcth, setOptionsNcth] = createLocalStore('optionsNcth', initialOptionsNcth)
+const [linker, setLinker] = createSignal(initialLinker)
+const [tab, setTab] = createSignal(0)
 
 const input = () => {
   if (files.length == 0) {
@@ -106,7 +142,7 @@ const input = () => {
   }
   return files[tab()]
 }
-const setSource = (source) => setFiles(tab(), { name: input().name, source })
+const setSource = (source: string) => setFiles(tab(), { name: input().name, source })
 const [output, setOutput] = createSignal(DEFAULT_OUTPUT)
 
 function run() {
@@ -168,18 +204,83 @@ function reset() {
 }
 
 async function share() {
-  const codedFiles = await encodeForUrl(JSON.stringify(files))
-  const url = new URL(window.location.origin + window.location.pathname)
-  url.search = '?files=' + codedFiles + '&linker=' + linker()
+  const data = JSON.stringify({
+    files: files,
+    linker: linker(),
+    options: options,
+  })
+  try {
+    const response = await fetch('/share', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({ data }),
+    });
 
-  if (linker() === 'k2d222') {
-    url.search += '&options=' + await encodeForUrl(JSON.stringify(options))
-  } else {
-    url.search += '&optionsNcth=' + await encodeForUrl(JSON.stringify(optionsNcth))
+    if (!response.ok) {
+      alert(`failed to share sandbox: ${response.status}`)
+      throw new Error(`POST to sharing server error: ${response.status}`)
+    }
+
+    const hash = await response.text()
+    const url = new URL(`${window.location.origin}/s/${hash}`)
+    window.history.pushState(hash, "", url)
+    setOutput('copy the URL below share this playground.\n' + url.toString())
+    hasHash = true
   }
+  catch (error) {
+    console.error(error)
+  }
+}
 
-  // window.location.search = url.search
-  setOutput('copy the URL below share this playground.\n' + url.toString())
+async function setShare(hash: String) {
+  try {
+    console.log(`loading hash ${hash}`)
+    const response = await fetch(`/share/${hash}`, {
+      method: 'GET',
+    });
+
+    if (!response.ok) {
+      alert(`failed to load shared sandbox: ${response.status}`)
+      throw new Error(`POST to sharing server error: ${response.status}`)
+    }
+
+    const data = JSON.parse(await response.text())
+    hasHash = false
+
+    if (Array.isArray(data.files)) {
+      const files = []
+      for (const file of data.files) {
+        if (typeof file.name === 'string' && typeof file.source === 'string') {
+          files.push({ name: file.name, source: file.source })
+        }
+      }
+      setFiles(files)
+    }
+    if (typeof data.linker === 'string') {
+      setLinker(data.linker)
+    }
+    if (typeof data.options === 'object') {
+      const curOptions = linker() === 'k2d222' ? options : linker() === 'ncthbrt' ? optionsNcth : {}
+      for (const key in data.options) {
+        if (key in curOptions && typeof data.options[key] === typeof curOptions[key]) {
+          curOptions[key] = data.options[key]
+        }
+      }
+      if (linker() === 'k2d222')
+        setOptions(curOptions)
+      else if (linker() === 'ncthbrt')
+        setOptionsNcth(optionsNcth)
+    }
+
+    const url = new URL(`${window.location.origin}/s/${hash}`)
+    setOutput('loaded shared playground.\n' + url.toString())
+    hasHash = true
+  }
+  catch (error) {
+    console.error(error)
+  }
 }
 
 function setupMonaco(elt: HTMLElement) {

@@ -183,6 +183,7 @@ input[type=text] {
   overflow-x: auto;
   white-space: nowrap;
   background-color: col(1);
+  flex-shrink: 0;
 }
 
 #left,
