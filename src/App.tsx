@@ -1,6 +1,7 @@
 import { compile, WeslOptions, ManglerKind, NcthOptions, compile_ncth } from "./wesl-web/wesl_web"
 
-import * as monaco from 'monaco-editor';
+import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
+import 'monaco-editor/esm/vs/basic-languages/wgsl/wgsl.contribution';
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
 
 import { For, type Component, createSignal, createEffect, Show, onMount, onCleanup } from 'solid-js';
@@ -247,6 +248,7 @@ async function setShare(hash: String) {
     }
 
     const data = JSON.parse(await response.text())
+    console.log('data:', data)
     hasHash = false
 
     if (Array.isArray(data.files)) {
@@ -262,7 +264,7 @@ async function setShare(hash: String) {
       setLinker(data.linker)
     }
     if (typeof data.options === 'object') {
-      const curOptions = linker() === 'k2d222' ? options : linker() === 'ncthbrt' ? optionsNcth : {}
+      const curOptions = linker() === 'k2d222' ? {...options} : linker() === 'ncthbrt' ? {...optionsNcth} : {}
       for (const key in data.options) {
         if (key in curOptions && typeof data.options[key] === typeof curOptions[key]) {
           curOptions[key] = data.options[key]
