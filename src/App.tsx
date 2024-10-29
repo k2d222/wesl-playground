@@ -31,7 +31,7 @@ const DEFAULT_OPTIONS_NCTH = {
     mangle: true,
     flatten: true,
 }
-const DEFAULT_OUTPUT =
+const DEFAULT_MESSAGE =
 `Visit the <a href="https://github.com/wgsl-tooling-wg/wesl-spec">WESL reference</a> to learn about WESL.<br/>
 <br/>
 Options:
@@ -145,6 +145,7 @@ const input = () => {
 }
 const setSource = (source: string) => setFiles(tab(), { name: input().name, source })
 const [output, setOutput] = createSignal('')
+const [message, setMessage] = createSignal(DEFAULT_MESSAGE)
 
 function run() {
   if (linker() === 'k2d222') {
@@ -176,9 +177,11 @@ function run_k2d222() {
 
   try {
     const res = compile(comp)
+    setMessage('')
     setOutput(res)
   } catch (e) {
-    setOutput(e)
+    setOutput('')
+    setMessage(e)
   }
 }
 
@@ -285,13 +288,13 @@ async function setShare(hash: String) {
   }
 }
 
-function setupMonaco(elt: HTMLElement) {
+function setupMonacoInput(elt: HTMLElement) {
   self.MonacoEnvironment = {
     getWorker: function (_workerId, _label) {
         return new editorWorker();
     }
   };
-  let editor = monaco.editor.create(elt, {
+  const editor = monaco.editor.create(elt, {
     value: input().source,
     language: 'wgsl',
     automaticLayout: true,
@@ -301,6 +304,25 @@ function setupMonaco(elt: HTMLElement) {
   editor.getModel().onDidChangeContent(() => setSource(editor.getValue()))
   createEffect(() => {
     editor.setValue(input().source)
+  })
+}
+
+function setupMonacoOutput(elt: HTMLElement) {
+  self.MonacoEnvironment = {
+    getWorker: function (_workerId, _label) {
+        return new editorWorker();
+    }
+  };
+  const editor = monaco.editor.create(elt, {
+    value: output(),
+    language: 'wgsl',
+    automaticLayout: true,
+    theme: 'vs',
+    readOnly: true,
+  });
+
+  createEffect(() => {
+    editor.setValue(output())
   })
 }
 
@@ -374,7 +396,7 @@ const App: Component = () => {
               </button>
             </div>
           </div>
-          <div id="input" ref={elt => setupMonaco(elt)}></div>
+          <div id="input" ref={elt => setupMonacoInput(elt)}></div>
         </div>
       </div>
       <div id="right">
@@ -457,11 +479,8 @@ const App: Component = () => {
               </label>
             </Show>
           </div>
-          <div id="output">
-            <Show when={output()} fallback={<pre innerHTML={DEFAULT_OUTPUT}></pre>}>
-              <pre><code innerText={output()}></code></pre>
-            </Show>
-          </div>
+          <div id="message" style={{ display: message() ? 'initial' : 'none' }}><pre innerHTML={message()}></pre></div>
+          <div id="output" style={{ display: output() ? 'initial' : 'none' }} ref={elt => setupMonacoOutput(elt)}></div>
         </div>
       </div>
     </div>

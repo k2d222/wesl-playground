@@ -40,13 +40,13 @@ button {
   cursor: pointer;
 }
 
-pre {
-  margin: 0;
-  padding: .5rem;
-  overflow: auto;
-  width: 100%;
-  height: 100%;
-}
+/* pre { */
+/* margin: 0; */
+/* padding: .5rem; */
+/* overflow: auto; */
+/* width: 100%; */
+/* height: 100%; */
+/* } */
 
 textarea {
   width: 100%;
@@ -188,6 +188,7 @@ input[type=text] {
   white-space: nowrap;
   background-color: col(1);
   flex-shrink: 0;
+  border-bottom: 1px solid #a4a4a4;
 }
 
 #left,
@@ -207,16 +208,31 @@ input[type=text] {
 }
 
 #input,
-#output {
+#output,
+#message {
   position: relative;
+  padding-top: 0.5rem;
 
   &::after {
     content: "";
     position: absolute;
     inset: 0;
-    box-shadow: inset 0 0 5px 1px #0000004f;
+    box-shadow: inset 0 0 4px 0px #0000004f;
     z-index: 10;
     pointer-events: none;
+  }
+}
+
+#message {
+  padding: .5rem;
+  width: 100%;
+  height: 100%;
+
+  >pre {
+    margin: 0;
+    overflow: auto;
+    width: 100%;
+    height: 100%;
   }
 }
 
