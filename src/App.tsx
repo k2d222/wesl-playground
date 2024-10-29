@@ -1,4 +1,4 @@
-import { compile, WeslOptions, ManglerKind, NcthOptions, compile_ncth } from "./wesl-web/wesl_web"
+import { compile, WeslOptions, ManglerKind, NcthOptions, compile_ncth, type Error, Diagnostic } from "./wesl-web/wesl_web"
 
 // import * as monaco from 'monaco-editor';
 // more barebones version below:
@@ -8,13 +8,14 @@ import 'monaco-editor/esm/vs/editor/contrib/find/browser/findController'
 import 'monaco-editor/esm/vs/editor/common/standaloneStrings'
 import 'monaco-editor/esm/vs/base/browser/ui/codicons/codiconStyles'; // The codicons are defined here and must be loaded
 import 'monaco-editor/esm/vs/basic-languages/wgsl/wgsl.contribution'
+import 'monaco-editor/esm/vs/editor/contrib/hover/browser/hoverContribution.js';
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
 
 import { For, type Component, createSignal, createEffect, Show, onMount, onCleanup, on } from 'solid-js'
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import './style.scss'
 
-const DEFAULT_FILES = [
+const DEFAULT_FILES = () => [
   { name: 'main.wgsl', source: 'import util/my_fn;\nfn main() -> u32 {\n    return my_fn();\n}\n' },
   { name: 'util.wgsl', source: 'fn my_fn() -> u32 { return 42; }' },
 ]
@@ -143,7 +144,7 @@ for (const key in DEFAULT_OPTIONS_NCTH)
   if (URL_PARAMS.has(key))
     initialOptionsNcth[key] = URL_PARAMS.get(key)
 
-const [files, setFiles] = createLocalStore('files', DEFAULT_FILES)
+const [files, setFiles] = createLocalStore('files', DEFAULT_FILES())
 const [options, setOptions] = createLocalStore('options', initialOptions)
 const [optionsNcth, setOptionsNcth] = createLocalStore('optionsNcth', initialOptionsNcth)
 const [linker, setLinker] = createSignal(initialLinker)
@@ -151,6 +152,7 @@ const [tab, setTab] = createSignal(0)
 
 const setSource = (source: string) => setFiles(tab(), { name: files[tab()].name, source })
 const source = () => files[tab()]?.source ?? ''
+const [diagnostics, setDiagnostics] = createSignal<Diagnostic[]>([])
 const [output, setOutput] = createSignal('')
 const [message, setMessage] = createSignal(DEFAULT_MESSAGE)
 
@@ -163,11 +165,14 @@ createEffect(() => {
 
 let runTimeout = 0
 function toggleAutoRun(toggle: boolean) {
-  function loop() {
-    run()
-    runTimeout = setTimeout(loop, 1000)
+  clearTimeout(runTimeout)
+  if (toggle) {
+    function loop() {
+      run()
+      runTimeout = setTimeout(loop, 1000)
+    }
+    loop()
   }
-  loop()
 }
 
 function run() {
@@ -202,9 +207,13 @@ function run_k2d222() {
     const res = compile(comp)
     setMessage('')
     setOutput(res)
+    setDiagnostics([])
   } catch (e) {
+    console.error('compilation failure', e)
+    const err = e as Error
     setOutput('')
-    setMessage(e)
+    setMessage(err.message)
+    setDiagnostics(err.diagnostics)
   }
 }
 
@@ -218,16 +227,22 @@ function run_ncth() {
 
   try {
     const res = compile_ncth(comp)
+    setMessage('')
     setOutput(res)
+    setDiagnostics([])
   } catch (e) {
-    setOutput(e)
+    console.error('compilation failure', e)
+    setOutput('')
+    setMessage(e)
+    setDiagnostics([])
   }
 }
 
 function reset() {
-  setFiles(DEFAULT_FILES)
+  setFiles(DEFAULT_FILES())
   setOptions(DEFAULT_OPTIONS)
   setOutput('')
+  setTab(0)
 }
 
 async function share() {
@@ -325,9 +340,27 @@ function setupMonacoInput(elt: HTMLElement) {
   });
 
   editor.getModel().onDidChangeContent(() => setSource(editor.getValue()))
+
   createEffect(on(tab, () => {
     editor.setValue(source())
   }))
+
+  createEffect(() => {
+    const model = editor.getModel()
+    const markers = diagnostics().filter(d => d.file === files[tab()].name).map(d => {
+      const p1 = model.getPositionAt(d.span.start)
+      const p2 = model.getPositionAt(d.span.end)
+      return {
+        startLineNumber: p1.lineNumber,
+        startColumn: p1.column,
+        endLineNumber: p2.lineNumber,
+        endColumn: p2.column,
+        message: d.title,
+        severity: monaco.MarkerSeverity.Error
+      }
+    })
+    monaco.editor.setModelMarkers(editor.getModel(), 'wesl', markers)
+  })
 }
 
 function setupMonacoOutput(elt: HTMLElement) {

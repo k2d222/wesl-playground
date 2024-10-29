@@ -49,6 +49,21 @@ pub struct NcthOptions {
     pub flatten: bool,
 }
 
+#[derive(Tsify, Serialize, Deserialize)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+pub struct Diagnostic {
+    file: String,
+    span: std::ops::Range<usize>,
+    title: String,
+}
+
+#[derive(Tsify, Serialize, Deserialize)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+pub struct Error {
+    message: String,
+    diagnostics: Vec<Diagnostic>,
+}
+
 fn make_mangler(kind: ManglerKind) -> Box<dyn Mangler> {
     match kind {
         ManglerKind::Escape => Box::new(MANGLER_ESCAPE),
@@ -57,7 +72,7 @@ fn make_mangler(kind: ManglerKind) -> Box<dyn Mangler> {
     }
 }
 
-fn compile_impl(args: WeslOptions) -> Result<String, Error> {
+fn compile_impl(args: WeslOptions) -> Result<String, wesl::Error> {
     let mut resolver = VirtualFileResolver::new();
 
     for (name, source) in args.files {
@@ -189,9 +204,38 @@ cfg_if! {
 }
 
 #[wasm_bindgen]
-pub fn compile(args: WeslOptions) -> Result<String, String> {
+pub fn compile(args: WeslOptions) -> Result<String, JsValue> {
     init_log();
-    compile_impl(args).map_err(|e| ansi_to_html::convert(&e.to_string()).unwrap())
+    compile_impl(args)
+        .map_err(|e| Error {
+            message: ansi_to_html::convert(&e.to_string()).unwrap(),
+            diagnostics: match e {
+                wesl::Error::Error(d)
+                | wesl::Error::ResolveError(wesl::ResolveError::Error(d))
+                | wesl::Error::ImportError(wesl::ImportError::ResolveError(
+                    wesl::ResolveError::Error(d),
+                )) => {
+                    if let wesl::Diagnostic {
+                        error,
+                        source,
+                        file: Some(file),
+                        declaration,
+                        span: Some(span),
+                    } = d
+                    {
+                        vec![Diagnostic {
+                            file: file.path().with_extension("wgsl").display().to_string(),
+                            span: span.range(),
+                            title: "error here".to_string(),
+                        }]
+                    } else {
+                        vec![]
+                    }
+                }
+                _ => vec![],
+            },
+        })
+        .map_err(|e| serde_wasm_bindgen::to_value(&e).unwrap())
 }
 
 #[wasm_bindgen]
