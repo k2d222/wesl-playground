@@ -2,7 +2,11 @@
 
 A web interface to test WESL (WGSL Extended) shaders in the browser.
 
-Reference: [wesl-spec](https://github.com/wgsl-tooling-wg/wesl-spec)
+Website: [wesl.thissma.fr](https://wesl.thissma.fr)
+
+WESL Implementations: [k2d222/wgsl-tools](https://github.com/k2d222/wgsl-tools) and [ncthbrt/mew](https://github.com/ncthbrt/mew)
+
+Spec Reference: [wesl-spec](https://github.com/wgsl-tooling-wg/wesl-spec)
 
 ## Contributing
 * Installing: `yarn install`
