@@ -40,14 +40,6 @@ button {
   cursor: pointer;
 }
 
-/* pre { */
-/* margin: 0; */
-/* padding: .5rem; */
-/* overflow: auto; */
-/* width: 100%; */
-/* height: 100%; */
-/* } */
-
 textarea {
   width: 100%;
   height: 100%;
@@ -211,7 +203,6 @@ input[type=text] {
 #output,
 #message {
   position: relative;
-  padding-top: 0.5rem;
 
   &::after {
     content: "";

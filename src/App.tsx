@@ -1,10 +1,10 @@
 import { compile, WeslOptions, ManglerKind, NcthOptions, compile_ncth } from "./wesl-web/wesl_web"
 
-import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
+import * as monaco from 'monaco-editor';
 import 'monaco-editor/esm/vs/basic-languages/wgsl/wgsl.contribution';
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
 
-import { For, type Component, createSignal, createEffect, Show, onMount, onCleanup } from 'solid-js';
+import { For, type Component, createSignal, createEffect, Show, onMount, onCleanup, on } from 'solid-js';
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store";
 import './style.scss'
 
@@ -114,9 +114,18 @@ function removeIndex<T>(array: readonly T[], index: number): T[] {
   return [...array.slice(0, index), ...array.slice(index + 1)];
 }
 
-const newFile = () => setFiles(files.length, { name: `tab${files.length}.wgsl`, source: "" })
-const delFile = (i: number) => setFiles(files => removeIndex(files, i))
-const renameFile = (i: number, name: string) => setFiles(i, (old) => ({ name, source: old.source }))
+const newFile = () => {
+  setFiles(files.length, { name: `tab${files.length}.wgsl`, source: "" })
+}
+
+const delFile = (i: number) => {
+  setTab(0)
+  setFiles(files => removeIndex(files, i))
+}
+
+const renameFile = (i: number, name: string) => {
+  setFiles(i, (old) => ({ name, source: old.source }))
+}
 
 const initialLinker = URL_PARAMS.get('linker') ?? 'k2d222'
 const initialOptions = { ...DEFAULT_OPTIONS }
@@ -134,16 +143,8 @@ const [optionsNcth, setOptionsNcth] = createLocalStore('optionsNcth', initialOpt
 const [linker, setLinker] = createSignal(initialLinker)
 const [tab, setTab] = createSignal(0)
 
-const input = () => {
-  if (files.length == 0) {
-    setFiles([{ name: 'main.wgsl', source: 'fn main() -> u32 {\n    return 0u;\n}\n' }])
-  }
-  if (tab() >= files.length) {
-    setTab(files.length - 1)
-  }
-  return files[tab()]
-}
-const setSource = (source: string) => setFiles(tab(), { name: input().name, source })
+const setSource = (source: string) => setFiles(tab(), { name: files[tab()].name, source })
+const source = () => files[tab()].source
 const [output, setOutput] = createSignal('')
 const [message, setMessage] = createSignal(DEFAULT_MESSAGE)
 
@@ -295,16 +296,16 @@ function setupMonacoInput(elt: HTMLElement) {
     }
   };
   const editor = monaco.editor.create(elt, {
-    value: input().source,
+    value: source(),
     language: 'wgsl',
     automaticLayout: true,
     theme: 'vs',
   });
 
   editor.getModel().onDidChangeContent(() => setSource(editor.getValue()))
-  createEffect(() => {
-    editor.setValue(input().source)
-  })
+  createEffect(on(tab, () => {
+    editor.setValue(source())
+  }))
 }
 
 function setupMonacoOutput(elt: HTMLElement) {
@@ -356,7 +357,7 @@ function TabBtn(props: TabBtnProps) {
   return (
     <div class="tab-btn text" classList={{selected: props.selected}} role="button" tabindex="0" onclick={props.onselect}>
       <div ondblclick={setEditable} onblur={endEditable} onkeydown={onKeyDown} contenteditable={false}>{props.name}</div>
-      <button onclick={props.ondelete}>
+      <button onclick={e => { e.stopPropagation(); props.ondelete() }}>
         <svg viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
       </button>
     </div>
