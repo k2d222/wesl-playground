@@ -159,9 +159,15 @@ input[type=text] {
     display: flex;
     gap: .1rem;
     align-items: center;
+    flex-wrap: wrap;
+    min-height: 3rem;
 
     >label {
       padding: 0.5rem 0.5rem;
+    }
+
+    >label input[type=text] {
+      width: 15rem;
     }
   }
 
@@ -179,8 +185,6 @@ input[type=text] {
 
 .head {
   width: 100%;
-  height: 3rem;
-  overflow-x: auto;
   white-space: nowrap;
   background-color: col(1);
   flex-shrink: 0;
@@ -217,6 +221,8 @@ input[type=text] {
 }
 
 .tabs {
+  height: 3rem;
+  overflow-x: auto;
   display: flex;
   gap: 0.1rem;
 

@@ -144,7 +144,7 @@ const input = () => {
   return files[tab()]
 }
 const setSource = (source: string) => setFiles(tab(), { name: input().name, source })
-const [output, setOutput] = createSignal(DEFAULT_OUTPUT)
+const [output, setOutput] = createSignal('')
 
 function run() {
   if (linker() === 'k2d222') {
@@ -201,7 +201,7 @@ function run_ncth() {
 function reset() {
   setFiles(DEFAULT_FILES)
   setOptions(DEFAULT_OPTIONS)
-  setOutput(DEFAULT_OUTPUT)
+  setOutput('')
 }
 
 async function share() {
@@ -346,7 +346,7 @@ const App: Component = () => {
     <div id="app">
       <div id="header">
         <h3>WESL Playground</h3>
-        <button id="btn-run" onclick={run}>run</button>
+        <button id="btn-run" onclick={run}>compile</button>
         <button id="btn-reset" onclick={reset}>reset</button>
         <button id="btn-share" onclick={share}>share</button>
         <label>
@@ -457,7 +457,11 @@ const App: Component = () => {
               </label>
             </Show>
           </div>
-          <div id="output"><pre><code innerHTML={output()}></code></pre></div>
+          <div id="output">
+            <Show when={output()} fallback={<pre innerHTML={DEFAULT_OUTPUT}></pre>}>
+              <pre><code innerText={output()}></code></pre>
+            </Show>
+          </div>
         </div>
       </div>
     </div>

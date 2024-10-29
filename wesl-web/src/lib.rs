@@ -57,7 +57,7 @@ fn make_mangler(kind: ManglerKind) -> Box<dyn Mangler> {
     }
 }
 
-fn compile_impl(args: WeslOptions) -> Result<String, Diagnostic> {
+fn compile_impl(args: WeslOptions) -> Result<String, Error> {
     let mut resolver = VirtualFileResolver::new();
 
     for (name, source) in args.files {
@@ -79,7 +79,8 @@ fn compile_impl(args: WeslOptions) -> Result<String, Diagnostic> {
     };
 
     let (wgsl, mut sourcemap) =
-        wesl::compile_with_sourcemap(&root, &resolver, &mangler, &compile_options)?;
+        wesl::compile_with_sourcemap(&root, &resolver, &mangler, &compile_options);
+    let wgsl = wgsl?;
 
     if let Some(eval) = args.eval {
         sourcemap.set_default_source(eval.clone());
