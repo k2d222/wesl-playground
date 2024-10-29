@@ -1,11 +1,17 @@
 import { compile, WeslOptions, ManglerKind, NcthOptions, compile_ncth } from "./wesl-web/wesl_web"
 
-import * as monaco from 'monaco-editor';
-import 'monaco-editor/esm/vs/basic-languages/wgsl/wgsl.contribution';
+// import * as monaco from 'monaco-editor';
+// more barebones version below:
+import * as monaco from 'monaco-editor/esm/vs/editor/editor.api'
+import 'monaco-editor/esm/vs/editor/browser/coreCommands'
+import 'monaco-editor/esm/vs/editor/contrib/find/browser/findController'
+import 'monaco-editor/esm/vs/editor/common/standaloneStrings'
+import 'monaco-editor/esm/vs/base/browser/ui/codicons/codiconStyles'; // The codicons are defined here and must be loaded
+import 'monaco-editor/esm/vs/basic-languages/wgsl/wgsl.contribution'
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
 
-import { For, type Component, createSignal, createEffect, Show, onMount, onCleanup, on } from 'solid-js';
-import { createStore, type SetStoreFunction, type Store } from "solid-js/store";
+import { For, type Component, createSignal, createEffect, Show, onMount, onCleanup, on } from 'solid-js'
+import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import './style.scss'
 
 const DEFAULT_FILES = [
@@ -144,9 +150,25 @@ const [linker, setLinker] = createSignal(initialLinker)
 const [tab, setTab] = createSignal(0)
 
 const setSource = (source: string) => setFiles(tab(), { name: files[tab()].name, source })
-const source = () => files[tab()].source
+const source = () => files[tab()]?.source ?? ''
 const [output, setOutput] = createSignal('')
 const [message, setMessage] = createSignal(DEFAULT_MESSAGE)
+
+// this effect ensures that there is always at least 1 tab open.
+createEffect(() => {
+  if (files.length == 0) {
+    setFiles([{ name: 'main.wgsl', source: 'fn main() -> u32 {\n    return 0u;\n}\n' }])
+  }
+})
+
+let runTimeout = 0
+function toggleAutoRun(toggle: boolean) {
+  function loop() {
+    run()
+    runTimeout = setTimeout(loop, 1000)
+  }
+  loop()
+}
 
 function run() {
   if (linker() === 'k2d222') {
@@ -372,6 +394,10 @@ const App: Component = () => {
         <button id="btn-run" onclick={run}>compile</button>
         <button id="btn-reset" onclick={reset}>reset</button>
         <button id="btn-share" onclick={share}>share</button>
+        <label>
+          <span>auto recompile</span>
+          <input type="checkbox" name="linker" value="k2d222" onChange={e => toggleAutoRun(e.currentTarget.checked)} />
+        </label>
         <label>
           <span>k2d222's linker</span>
           <input type="radio" name="linker" value="k2d222" checked={linker() === "k2d222"} onchange={e => setLinker(e.currentTarget.value)} />
